@@ -1,6 +1,6 @@
 
 
-# JSI Cherenkov pulse recorder
+# JSI Cherenkov power meter
 
 <img align="right" width="30%" height="30%" src="logo_white.png" alt="JSI pulse recorder">
 
