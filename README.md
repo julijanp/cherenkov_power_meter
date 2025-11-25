@@ -45,3 +45,4 @@ $ python3 app_test_mac.py
 * [Testing a new exercise at the JSI TRIGA reactor - Cherenkov radiation-based power meter](https://www.eneep.org/news/testing-new-exercise-jsi-triga-reactor-cherenkov-radiation-based-power-meter/)
 
 * [Reactor Pulse Operation for Nuclear Instrumentation Detector Testing – Preparation of a Dedicated Experimental Campaign at the JSI TRIGA Reactor](https://www.epj-conferences.org/articles/epjconf/pdf/2021/07/epjconf_animma2021_04019.pdf)
+* [Cherenkov reactor power meter: Development of an innovative and cost-effective technique for reactor power monitoring](https://www.sciencedirect.com/science/article/pii/S1738573325006102)
