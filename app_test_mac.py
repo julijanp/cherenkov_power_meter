@@ -10,6 +10,7 @@ import csv
 import numpy as np
 import datetime
 from scipy.signal import find_peaks, peak_widths
+import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
@@ -34,7 +35,7 @@ DECOPTIONS = [
 ] 
 
 global initialization
-initialization=['192.168.0.15', 'F18', 'CH1_PE', '6.5', '2.5','23.4', '0', '0', '0', '630', '1.30', '65536','0.015','7000']
+initialization=['rp-f0c33c.local', 'F18', 'CH1_PE', '6.5', '2.5','23.4', '0', '0', '0', '630', '1.30', '65536','0.015','1000']
 
 # Initialization function (Starts after Initialize button is pressed)
 def init_measurement(IP1,P1,V1,h1,B1,CH):
@@ -165,7 +166,7 @@ def pulse_record_test():
     file.write('Intention: Pulse testing\n')
     file.write('Sensor: Ketek Sipm PM3315\n')
     file.write('Amplifire: ThorLabs AMP220\n')
-    file.write('ND Filter: ThorLabs ND06A\n')
+    file.write('ND Filter: ThorLabs '+ND_filter+'\n')
     file.write('Water volume: '+water_volume+'dl\n')
     file.write('Data acquisition: Redpitaya STEMlab 125-14\n')
     file.write('Redpitaya decimation:'+decimation+'\n')
@@ -181,81 +182,121 @@ def pulse_record_test():
     file.close()
     
     #Redpitaya measurement time line
-    buffer_length=16384 #redpitaya buffer length
-    sampling_rate=125000000 #redpitaya 125*10^6 S/s
-    decimation_redpitaya=int(decimation)
-    stop_time=(decimation_redpitaya/sampling_rate)*buffer_length
-    print(stop_time)
+    ## size in samples 16Bit
+    DATA_SIZE = 1024 * 16 * 4         # ((1024 * 1024 * 128) / 2)        ## for 128 MB ##
+    READ_DATA_SIZE = 1024 * 16 * 2    # (1024 * 256)                     ## for 128 MB ##
 
-    t=np.linspace(start=0,stop=stop_time,num=16384)
+    dec = int(decimation) #8192
+    sampling_rate=125000000 #redpitaya 125*10^6 S/s
+    stop_time=(dec/sampling_rate)*READ_DATA_SIZE
+    print(f"DAQ length: {stop_time:.2f}s")
+    t=np.linspace(start=0,stop=stop_time,num=READ_DATA_SIZE)
+
+    trig_lvl = trigger_level
     initialization[9]=str(int(numberOfPulses)+1)
     ID.delete(0,END)
     ID.insert(0,initialization[9])
     #redpitaya initialization
-    rp_s = scpi.scpi(initialization[0])
 
-    #signal generation RPI (IN and OUT)
-    wave_form = 'sine'
-    freq = 0.1
-    ampl = 0.7
-
-    rp_s.tx_txt('GEN:RST')
-
-    rp_s.tx_txt('SOUR1:FUNC ' + str(wave_form).upper())
-    rp_s.tx_txt('SOUR1:FREQ:FIX ' + str(freq))
-    rp_s.tx_txt('SOUR1:VOLT ' + str(ampl))
-
-    # Enable output
-    rp_s.tx_txt('OUTPUT1:STATE ON')
-    rp_s.tx_txt('SOUR1:TRIG:INT')
-
-    rp_s.tx_txt('ACQ:RST')
+    rp = scpi.scpi(initialization[0])
 
 
-    #rp_s.tx_txt('ACQ:DATA:FORMAT ASCII')
-    #rp_s.tx_txt('ACQ:DATA:UNITS VOLTS')
-    rp_s.tx_txt('ACQ:DEC '+decimation)
-    rp_s.tx_txt('ACQ:TRIG:LEV '+trigger_level) #trigger in Volts usual: 0.007
-    rp_s.tx_txt('ACQ:TRIG '+measurement_channel)
-    rp_s.tx_txt('ACQ:TRIG:DLY '+trigger_delay) #trigger delay
+    print("Start program")
+## Reset Acquisition
+    rp.tx_txt('ACQ:RST')
 
-    print('Initialization')
+# Get Memory region
+    start_address = int(rp.txrx_txt('ACQ:AXI:START?'))
+    size = int(rp.txrx_txt('ACQ:AXI:SIZE?'))
 
 
-    rp_s.tx_txt('ACQ:START')
+#print(start_address)
+#print(size)
+#print(f"Reserved memory Start: {start_address:x} Size: {size:x}\n")
 
-    time.sleep(stop_time+1)  #flushing the buffer (waiting for new measurements)
+# Set decimation
+    rp.tx_txt(f"ACQ:AXI:DEC {dec}")
 
-    print('Ready')
+# Set units
+    rp.tx_txt('ACQ:AXI:DATA:Units VOLTS')
 
+# Set trigger delay for the channel
+    rp.tx_txt(f"ACQ:AXI:SOUR1:Trig:Dly {DATA_SIZE}")
+
+# Set-up the Channel 1 to  work with the available memory space.
+    rp.tx_txt(f"ACQ:AXI:SOUR1:SET:Buffer {start_address},{size}")
+
+
+# Enable DMA
+    rp.tx_txt('ACQ:AXI:SOUR1:ENable ON')
+    print('Enable CHA\n')
+
+# Specify the acquisition trigger
+    rp.tx_txt(f"ACQ:TRig:LEV {trig_lvl}")
+
+
+## ACQUISITION
+
+    rp.tx_txt('ACQ:START')
+    rp.tx_txt('ACQ:TRig CH1_PE')
+
+
+    print("Waiting for trigger\n")
+
+# Wait for trigger
     while 1:
-        rp_s.tx_txt('ACQ:TRIG:STAT?')
-        #print('Waiting')
-        if rp_s.rx_txt() == 'TD':
-            print('TRIGGERED')
+        rp.tx_txt("ACQ:TRig:STAT?")
+        if rp.rx_txt() == 'TD':
+            print("Triggered")
+            time.sleep(1)
             break
 
-    rp_s.tx_txt('ACQ:SOUR1:DATA?') #reading buffer
-    buff_string = rp_s.rx_txt()
-    buff_string = buff_string.strip('{}\n\r').replace("  ", "").split(',')
-    buff = list(map(float, buff_string))  #measurements
+# wait for fill adc buffer
+    while 1:
+        rp.tx_txt('ACQ:AXI:SOUR1:TRig:FILL?')
+        if rp.rx_txt() == '1':
+            print('DMA buffer full\n')
+            break
+
+# Stop Acquisition
+    rp.tx_txt('ACQ:STOP')
+
+## Get write pointer at trigger location
+    posChA = int(rp.txrx_txt('ACQ:AXI:SOUR1:Trig:Pos?'))
+    print(posChA)
+
+## Read & plot
+#### getting some data before trigger point for better visualization of the signal
+    trig_delay = int(trigger_delay)
+    if posChA > trig_delay:
+        trig_delay = trig_delay
+    else:
+        trig_delay = 0
+
+    rp.tx_txt(f"ACQ:AXI:SOUR1:DATA:Start:N? {posChA-trig_delay},{READ_DATA_SIZE}")
+    signal_str = rp.rx_txt()
+
+
+    print("Data Acquired\n")
+
+    buff1 = list(map(float, signal_str.strip('{}\n\r').replace("  ", "").split(',')))
 
     #save to file
     with open(fileName,"a") as f:
         writer=csv.writer(f)
-        writer.writerows(zip(t,buff))
+        writer.writerows(zip(t,buff1))
 
     #pulse analysis
 
     #peak
-    signal=np.asarray(buff)
-    maximum=max(buff)
-    maximumind=buff.index(maximum)
+    signal=np.asarray(buff1)
+    maximum=max(buff1)
+    maximumind=buff1.index(maximum)
     print("Signal peak: "+str(maximum)+" V")
     maximuminda=np.array([maximumind])
     #FWHM
-    results_half = peak_widths(buff, maximuminda, rel_height=0.5)
-    dt=stop_time/buffer_length
+    results_half = peak_widths(buff1, maximuminda, rel_height=0.5)
+    dt=stop_time/DATA_SIZE
     fwhm=float(results_half[0]*dt)
     print("FWHM: "+str(fwhm)+" s")
     
