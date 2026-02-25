@@ -29,7 +29,7 @@ The Cherenkov Pulse Recorder is based on a closed tube in order to avoid interfe
 
 ## Technologies
 Project is created with:
-* Python 3.8
+* Python 3.11
 * Tkinter
 * Pandas
 * NumPy
