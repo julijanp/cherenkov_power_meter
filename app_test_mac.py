@@ -71,6 +71,7 @@ def init_measurement(IP1,P1,V1,h1,B1,CH):
     B.config(state=DISABLED)
     w.config(state=DISABLED)
     button5.config(state=NORMAL)
+    print("Initialization complete")
     #printinit()
     
 def printinit():
@@ -120,7 +121,6 @@ def start_measurement(ND11,ND21,ND31,ID1,IR1,DEC1,TRL1,TRD1):
     #TRD.config(state=DISABLED)
     #printinit()  
     pulse_record_test()
-    
     
 # Pulse record function (starts after measure button is pressed)    
 def pulse_record_test():
@@ -297,12 +297,12 @@ def pulse_record_test():
     #FWHM
     results_half = peak_widths(buff1, maximuminda, rel_height=0.5)
     dt=stop_time/DATA_SIZE
-    fwhm=float(results_half[0]*dt)
+    fwhm = results_half[0].item() * dt
     print("FWHM: "+str(fwhm)+" s")
     
     #integral
     a=1000
-    RE=np.trapz(signal[(maximumind-a):(maximumind+a)],dx=dt)
+    RE=np.trapezoid(signal[(maximumind-a):(maximumind+a)],dx=dt)
     print("Released energy: "+str(RE)+" a.u.")
     #measurement_on()
     fileP = open(fileNameP, "a")
@@ -347,116 +347,6 @@ def pulse_record_test():
     label102.grid(row = 3, column = 0, pady = 2)
     label103 = Label(window, text="Energy released: "+str(RE)+" a.u.", font=NORM_FONT)
     label103.grid(row = 4, column = 0, pady = 2)
-    
-    
-    
-# Pulse record function (starts after measure button is pressed)    
-def pulse_record():
-    global initialization  
-    numberOfPulses = initialization[9] #pulse ID
-    water_volume = initialization[3] #water volume
-    position=initialization[1] #Channel position
-    decimation=initialization[11] #Decimation
-    trigger_level=initialization[12] #trigger level V
-    trigger_delay=initialization[13] #trigger delay S
-    pulse_ID=initialization[9] #pulse ID
-    pulse_IR=initialization[10] #instrted reactivity
-    
-    #ND filter selection storage
-    ND_filter="noND"
-    if initialization[6]=="1":
-        ND_filter = "ND06A"
-    elif initialization[7]=="1":
-        ND_filter = "ND10A"
-    elif initialization[8]=="1":
-        ND_filter = "ND20A"
-    
-    #print(ND_filter)
-    
-    #Pulses fired during measurements on that day
-    datenow = datetime.datetime.now()
-    date_string = datenow.strftime('%d_%m_%Y')
-    fileNameP="recorded_pulses_"+date_string+".csv"
-    fileP = open(fileNameP, "a")
-    fileP.write(pulse_ID+","+pulse_IR+","+decimation+","+trigger_level+","+trigger_delay+","+ND_filter+"\n")
-    
-    #file creation
-    fileName= "pulse_"+str(numberOfPulses)+".csv"  #name of the CSV file generated
-    print("File created")
-    file = open(fileName, "a")
-    file.write('---------------------------------\n')
-    file.write('Intention: Pulse testing\n')
-    file.write('Sensor: Ketek Sipm PM3315\n')
-    file.write('Amplifire: ThorLabs AMP220\n')
-    file.write('ND Filter: ThorLabs ND06A\n')
-    file.write('Water volume: '+water_volume+'dl\n')
-    file.write('Data acquisition: Redpitaya STEMlab 125-14\n')
-    file.write('Redpitaya decimation:'+decimation+'\n')
-    file.write('Redpitaya trigger level:'+trigger_level+'\n')
-    file.write('Redpitaya trigger delay:'+trigger_delay+'\n')
-    file.write('Location: JSI TRIGA reactor ('+position+')\n')
-    file.write('Pulse ID: '+pulse_ID+'\n')
-    now = datetime.datetime.now()
-    dt_string = now.strftime('%d/%m/%Y %H:%M:%S')
-    file.write('Date and time:' + dt_string + '\n')
-    file.write('---------------------------------\n')
-    file.write('Time,Voltage\n')
-    file.close()
-    
-    #Redpitaya measurement time line
-    buffer_length=16384 #redpitaya buffer length
-    sampling_rate=125000000 #redpitaya 125*10^6 S/s
-    decimation_redpitaya=int(decimation)
-    stop_time=(decimation_redpitaya/sampling_rate)*buffer_length
-    #print(stop_time)
-
-    t=np.linspace(start=0,stop=stop_time,num=16384)
-    initialization[9]=str(int(numberOfPulses)+1)
-    ID.delete(0,END)
-    ID.insert(0,initialization[9])
-    #redpitaya initialization
-    #measurement_on()
-    
-    #--------------------------------------------------------------------------------------------------------------------------------------
-    ## New window with results
-    #--------------------------------------------------------------------------------------------------------------------------------------
-    window = Toplevel(root)
-    window.title('Pulse number: '+numberOfPulses)
-    window.geometry('600x'+str(root.winfo_height())+'+'+str(root.winfo_width()+10)+'+30')
-    #window.minsize(500, 500)
-    # the figure that will contain the plot
-    fig = Figure(figsize = (6, 4),
-                 dpi = 100)
-  
-    # list of squares
-    y = [i**2 for i in range(101)]
-  
-    # adding the subplot
-    plot1 = fig.add_subplot(111)
-  
-    # plotting the graph
-    plot1.plot(y,y)
-    plot1.set_ylabel("U [V]")
-    plot1.set_xlabel("t [s]")
-  
-    # creating the Tkinter canvas
-    # containing the Matplotlib figure
-    canvas = FigureCanvasTkAgg(fig,
-                               master = window)  
-    #canvas.draw()
-  
-    # placing the widgets on the Tkinter window
-    canvas.get_tk_widget().grid(row=0,column=0, padx = 10, pady = 10)
-    label100 = Label(window, text="File name: "+fileName, font=NORM_FONT)
-    label100.grid(row = 1, column = 0, pady = 2)
-    label101 = Label(window, text="Signal peak: "+trigger_level+" V", font=NORM_FONT)
-    label101.grid(row = 2, column = 0, pady = 2)
-    label102 = Label(window, text="FWHM: "+trigger_level+" s", font=NORM_FONT)
-    label102.grid(row = 3, column = 0, pady = 2)
-    label103 = Label(window, text="Energy released: "+trigger_level+" a.u.", font=NORM_FONT)
-    label103.grid(row = 4, column = 0, pady = 2)
-
-
     
 # create root window
 def measurement_on():
